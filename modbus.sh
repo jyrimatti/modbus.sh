@@ -184,7 +184,20 @@ multiply() {
     if [ "$MULTIPLIER" = "1" ]; then
         echo "$x"
     else
-        echo "$x * $MULTIPLIER" | bc;
+        echo "$x * $MULTIPLIER" | bc | {
+            read -r x
+            case $x in
+                .*)
+                    echo "0$x"
+                    ;;
+                -.*)
+                    echo "-0.${x##*.}"
+                    ;;
+                *)
+                    echo "$x"
+                    ;;
+            esac
+        }
     fi
 }
 
@@ -194,7 +207,10 @@ divide() {
     if [ "$MULTIPLIER" = "1" ]; then
         echo "$x"
     else
-        echo "$x / $MULTIPLIER" | bc -l | { read -r x; printf "%.0f\n" "$x"; }
+        echo "$x / $MULTIPLIER" | bc -l | {
+            read -r x
+            printf "%.0f\n" "$x"
+        }
     fi
 }
 
