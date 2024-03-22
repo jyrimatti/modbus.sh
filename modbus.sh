@@ -232,9 +232,6 @@ if [ "$VERBOSE" = "1" ]; then
     echo "> $tosend" >&2
 fi
 
-trap "false" USR1
-trap "true" INT
-
 {
     if [ "$DELAY" != "0" ]; then
         sleep "$DELAY"
@@ -254,7 +251,8 @@ trap "true" INT
       if [ "$_functioncode" = "8$functioncode" ]; then
         _exceptioncode="$(dd bs=1 count=1 status=none | xxd -p)"
         echo "Error response: $_functioncode, exceptioncode: $_exceptioncode" >&2
-        kill -s USR1 0
+        #kill -s USR1 0
+        exit 1
       fi
 
       if [ "$functioncode" = "5" ] || [ "$functioncode" = "6" ]; then
@@ -277,5 +275,4 @@ trap "true" INT
 } | multiply "$MULTIPLIER" | {
     read -r x
     echo "$x"
-    kill -s INT 0
-} || true
+}
