@@ -233,7 +233,7 @@ if [ "$VERBOSE" = "1" ]; then
 fi
 
 trap "false" USR1
-trap "false" INT
+trap "true" INT
 
 {
     if [ "$DELAY" != "0" ]; then
