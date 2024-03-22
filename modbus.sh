@@ -217,6 +217,7 @@ if [ "$VERBOSE" = "1" ]; then
 fi
 
 trap "false" USR1
+trap "false" INT
 
 {
     if [ "$DELAY" != "0" ]; then
@@ -261,4 +262,4 @@ trap "false" USR1
     read -r x
     echo "$x"
     kill -s INT 0
-}
+} || true
