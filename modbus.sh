@@ -294,10 +294,10 @@ fi
 
       if [ "$VERBOSE" = "1" ]; then
         _valuelength="$(dd bs=1 count=1 status=none | xxd -p)"
-        _value="$(dd count=1 bs="$((_lengthDec-3))" status=none | xxd -p)"
+        _value="$(dd bs=1 count="$((_lengthDec-3))" status=none | xxd -p)"
       else
         _valuelength=""
-        _value="$(dd count=1 skip=1 bs="$((_lengthDec-3))" status=none | xxd -p)"
+        _value="$(dd bs=1 skip=1 count="$((_lengthDec-3))" status=none | xxd -p)"
       fi
       
       if [ "$ENDIANESS" = "le" ]; then
