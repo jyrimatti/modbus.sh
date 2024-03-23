@@ -3,6 +3,8 @@
 
 set -eu
 
+NCFLAGS=-W1 # Terminate after receiving 1 packet from the network
+
 usage() {
     echo "Read and write Modbus registers"
     echo ""
@@ -237,7 +239,7 @@ fi
         sleep "$DELAY"
     fi
     echo -n "$tosend" | xxd -r -p
-} | nc "$host" "$PORT" | {
+} | nc $NCFLAGS "$host" "$PORT" | {
     if [ "$VERBOSE" = "1" ]; then
         _txid="$(dd bs=1 count=2 status=none | xxd -p)"
         _protocolid="$(dd bs=1 count=2 status=none | xxd -p)"
@@ -251,7 +253,6 @@ fi
       if [ "$_functioncode" = "8$functioncode" ]; then
         _exceptioncode="$(dd bs=1 count=1 status=none | xxd -p)"
         echo "Error response: $_functioncode, exceptioncode: $_exceptioncode" >&2
-        #kill -s USR1 0
         exit 1
       fi
 
