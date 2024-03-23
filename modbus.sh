@@ -8,7 +8,7 @@ NCFLAGS=-W1 # Terminate after receiving 1 packet from the network
 usage() {
     echo "Read and write Modbus registers"
     echo ""
-    echo "Usage: $0 [-v] [-p <port:502>] [-c <clientid:255>] [-e <endianess:be>] [-d <delay:0>] [-m <multiplier:1>]"
+    echo "Usage: $0 [-v] [-p <port:502>] [-u <unitid:255>] [-e <endianess:be>] [-d <delay:0>] [-m <multiplier:1>]"
     echo "                   <host> <functioncode:1|2|3|4|5|6> <register> <type:uint16|int16|uint32|int32|float|(stringbytes)> [<newvalue>]" 1>&2
     echo ""
     echo "stringbytes : read this many bytes and interpret as text"
@@ -29,11 +29,11 @@ posnumber() { case $OPTARG in (*[!0-9.]*) return 1 ;; esac; }
 
 VERBOSE=0
 PORT=502
-CLIENTID=255
+UNITID=255
 ENDIANESS="be"
 DELAY=0
 MULTIPLIER=1
-while getopts ":p:c:e:d:m:v" o; do
+while getopts ":p:u:e:d:m:v" o; do
     case "${o}" in
         v)
             VERBOSE=${OPTARG:-1}
@@ -42,8 +42,8 @@ while getopts ":p:c:e:d:m:v" o; do
             PORT=${OPTARG}
             natural || usage
             ;;
-        c)
-            CLIENTID=${OPTARG}
+        u)
+            UNITID=${OPTARG}
             natural || usage
             ;;
         e)
@@ -73,8 +73,10 @@ startaddress="$3"
 type="$4"
 newvalue="${5:-}"
 
+# https://modbus.org/docs/Modbus_Messaging_Implementation_Guide_V1_0b.pdf
+
 # -------------------- MBAP header
-#                      -------------- Data
+#                      -------------- PDU
 # f9 e9 00 00 00 06 ff 03 9c 41 00 02
 # ----- Transaction Identifier
 #       ----- Protocol Identifier
@@ -87,9 +89,41 @@ newvalue="${5:-}"
 txid="$(dd if=/dev/urandom count=2 bs=1 status=none | xxd -ps)"
 protocolid="0000"
 length="0006"
-unitid="$(printf "%x" "$CLIENTID")"
+unitid="$(printf "%x" "$UNITID")"
 regstartaddress="$(printf "%04x" "$startaddress")"
 fcode="$(printf "%02x" "$functioncode")"
+
+errorMessage() {
+  case $1 in
+    "01")
+        echo "Illegal Function Code: The function code is unknown by the server"
+        ;;
+    "02") 
+        echo "Illegal Data Address"
+        ;;
+    "03")
+        echo "Illegal Data Value"
+        ;;
+    "04")
+        echo "Server Failure: The server failed during the execution"
+        ;;
+    "05")
+        echo "Acknowledge: The server accepted the service invocation but the service requires a relatively long time to execute. The server therefore returns only an acknowledgement of the service invocation receipt."
+        ;;
+    "06")
+        echo "Server Busy: The server was unable to accept the MB Request PDU. The client application has the responsibility of deciding if and when to re-send the request."
+        ;;
+    "0A")
+        echo "Gateway problem: Gateway paths not available."
+        ;;
+    "0B")
+        echo "Gateway problem: The targeted device failed to respond. The gateway generates this exception"
+        ;;
+    *)
+        echo "Unknown error code"
+        ;;
+  esac
+}
 
 typeLengthInHex() {
   case $1 in
@@ -247,31 +281,34 @@ fi
     else
         _length="$(dd bs=1 count=2 skip=4 status=none | xxd -p)"
     fi
-    if [ "$(printf "%d" "0x$_length")" -gt 0 ]; then
+    _lengthDec="$(printf "%d" "0x$_length")"
+
+    if [ "$_lengthDec" -gt 0 ]; then
       _unitid="$(dd bs=1 count=1 status=none | xxd -p)"
       _functioncode="$(dd bs=1 count=1 status=none | xxd -p)"
       if [ "$_functioncode" = "8$functioncode" ]; then
         _exceptioncode="$(dd bs=1 count=1 status=none | xxd -p)"
-        echo "Error response: $_functioncode, exceptioncode: $_exceptioncode" >&2
+        echo "Error response: $_functioncode, exceptioncode: $_exceptioncode, message: $(errorMessage "$_exceptioncode")" >&2
         exit 1
       fi
 
-      if [ "$functioncode" = "5" ] || [ "$functioncode" = "6" ]; then
-        _valuelength=""
-        _value="$(dd count=1 skip=1 bs=2 status=none | xxd -p)"
-      else
+      if [ "$VERBOSE" = "1" ]; then
         _valuelength="$(dd bs=1 count=1 status=none | xxd -p)"
-        _value="$(dd count=1 bs="$(printf "%d" "0x$_valuelength")" status=none | xxd -p)"
+        _value="$(dd count=1 bs="$((_lengthDec-3))" status=none | xxd -p)"
+      else
+        _valuelength=""
+        _value="$(dd count=1 skip=1 bs="$((_lengthDec-3))" status=none | xxd -p)"
       fi
       
       if [ "$ENDIANESS" = "le" ]; then
         _value="$(echo -n "$_value" | sed 's/\(.\)\(.\)/\2\1/g')"
       fi
-      printf "%d\n" "0x$_value" | deserialize "$type"
-    fi
-
-    if [ "$VERBOSE" = "1" ]; then
+      if [ "$VERBOSE" = "1" ]; then
         echo "< ${_txid}${_protocolid}${_length}${_unitid}${_functioncode}${_valuelength}${_value}" >&2
+      fi
+      printf "%d\n" "0x$_value" | deserialize "$type"
+    elif [ "$VERBOSE" = "1" ]; then
+        echo "< ${_txid}${_protocolid}${_length}" >&2
     fi
 } | multiply "$MULTIPLIER" | {
     read -r x
