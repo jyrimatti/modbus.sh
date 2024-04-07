@@ -1,5 +1,5 @@
 #! /usr/bin/env nix-shell
-#! nix-shell -i dash -I channel:nixos-23.11-small -p dash coreutils xxd netcat
+#! nix-shell -i dash --pure -I channel:nixos-23.11-small -p dash coreutils xxd netcat
 
 set -eu
 
@@ -142,8 +142,8 @@ typeLengthInHex() {
     "float")
         echo "0002"
         ;;
-    *) # n-byte string
-        printf "%04x\n" "$type"
+    *) # n-byte string (one register is two bytes)
+        printf "%04x\n" "$((type/2))"
         ;;
   esac
 }
@@ -186,30 +186,33 @@ deserialize() {
   read -r val
   case $type in
     "uint16")
-        printf "%d\n" "$val"
+        printf "%d\n" "0x$val"
         ;;
     "int16")
-        if [ "$val" -gt 32767 ]; then
-            printf "%d\n" "$((val - 65536))"
+        num="$(printf "%d" "0x$val")"
+        if [ "$num" -gt 32767 ]; then
+            printf "%d\n" "$((num - 65536))"
         else
-            printf "%d\n" "$val"
+            echo "$num"
         fi
         ;;
     "uint32")
-        printf "%d\n" "$val"
+        printf "%d\n" "0x$val"
         ;;
     "int32")
-        if [ "$val" -gt 2147483646 ]; then
-            printf "%d\n" "$((val - 4294967297))"
+        num="$(printf "%d" "0x$val")"
+        if [ "$num" -gt 2147483646 ]; then
+            printf "%d\n" "$((num - 4294967297))"
         else
-            printf "%d\n" "$val"
+            echo "$num"
         fi
         ;;
     "float")
-        printf "%f\n" "$val"
+        printf "%f\n" "0x$val"
         ;;
     *) # n-byte string
-        echo "$val" | xxd -r -p
+        ret="$(echo "$val" | xxd -r -p)"
+        echo "$ret"
         ;;
   esac
 }
@@ -306,7 +309,7 @@ fi
       if [ "$VERBOSE" = "1" ]; then
         echo "< ${_txid}${_protocolid}${_length}${_unitid}${_functioncode}${_valuelength}${_value}" >&2
       fi
-      printf "%d\n" "0x$_value" | deserialize "$type"
+      echo "$_value" | deserialize "$type"
     elif [ "$VERBOSE" = "1" ]; then
         echo "< ${_txid}${_protocolid}${_length}" >&2
     fi
