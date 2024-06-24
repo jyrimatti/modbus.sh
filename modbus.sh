@@ -271,12 +271,9 @@ if [ "$VERBOSE" = "1" ]; then
     echo "> $tosend" >&2
 fi
 
-{
-    if [ "$DELAY" != "0" ]; then
-        sleep "$DELAY"
-    fi
-    echo -n "$tosend" | xxd -r -p
-} | nc $NCFLAGS "$host" "$PORT" | {
+handleResult() {
+    retrying="${1:-0}"
+
     if [ "$VERBOSE" = "1" ]; then
         _txid="$(dd bs=1 count=2 status=none | xxd -p)"
         _protocolid="$(dd bs=1 count=2 status=none | xxd -p)"
@@ -284,36 +281,50 @@ fi
     else
         _length="$(dd bs=1 count=2 skip=4 status=none | xxd -p)"
     fi
+    if [ "$retrying" = 0 ] && [ -z "$_length" ]; then
+        echo "retrying..." >&2
+        handleResult 1
+        return 0
+    fi
     _lengthDec="$(printf "%d" "0x$_length")"
 
     if [ "$_lengthDec" -gt 0 ]; then
-      _unitid="$(dd bs=1 count=1 status=none | xxd -p)"
-      _functioncode="$(dd bs=1 count=1 status=none | xxd -p)"
-      if [ "$_functioncode" = "8$functioncode" ]; then
+    _unitid="$(dd bs=1 count=1 status=none | xxd -p)"
+    _functioncode="$(dd bs=1 count=1 status=none | xxd -p)"
+    if [ "$_functioncode" = "8$functioncode" ]; then
         _exceptioncode="$(dd bs=1 count=1 status=none | xxd -p)"
         echo "Error response: $_functioncode, exceptioncode: $_exceptioncode, message: $(errorMessage "$_exceptioncode")" >&2
         exit 1
-      fi
+    fi
 
-      if [ "$VERBOSE" = "1" ]; then
+    if [ "$VERBOSE" = "1" ]; then
         _valuelength="$(dd bs=1 count=1 status=none | xxd -p)"
         _value="$(dd bs=1 count="$((_lengthDec-3))" status=none | xxd -p)"
-      else
+    else
         _valuelength=""
         _value="$(dd bs=1 skip=1 count="$((_lengthDec-3))" status=none | xxd -p)"
-      fi
-      
-      if [ "$ENDIANESS" = "le" ]; then
+    fi
+    
+    if [ "$ENDIANESS" = "le" ]; then
         _value="$(echo -n "$_value" | sed 's/\(.\)\(.\)/\2\1/g')"
-      fi
-      if [ "$VERBOSE" = "1" ]; then
+    fi
+    if [ "$VERBOSE" = "1" ]; then
         echo "< ${_txid}${_protocolid}${_length}${_unitid}${_functioncode}${_valuelength}${_value}" >&2
-      fi
-      echo "$_value" | deserialize "$type"
+    fi
+    echo "$_value" | deserialize "$type"
     elif [ "$VERBOSE" = "1" ]; then
         echo "< ${_txid}${_protocolid}${_length}" >&2
     fi
-} | multiply "$MULTIPLIER" | {
-    read -r x
-    echo "$x"
 }
+
+{
+    if [ "$DELAY" != "0" ]; then
+        sleep "$DELAY"
+    fi
+    echo -n "$tosend" | xxd -r -p
+} | nc $NCFLAGS "$host" "$PORT" |
+    handleResult |
+    multiply "$MULTIPLIER" | {
+        read -r x
+        echo "$x"
+    }
