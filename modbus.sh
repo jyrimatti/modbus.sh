@@ -1,5 +1,5 @@
 #! /usr/bin/env nix-shell
-#! nix-shell -i dash --pure --keep LD_LIBRARY_PATH -I channel:nixos-23.11-small -p dash coreutils xxd netcat bc
+#! nix-shell -i dash --pure --keep LD_LIBRARY_PATH -I channel:nixos-24.05-small -p dash coreutils xxd netcat bc
 
 set -eu
 
@@ -9,7 +9,7 @@ usage() {
     echo "Read and write Modbus registers"
     echo ""
     echo "Usage: $0 [-v] [-p <port:502>] [-u <unitid:255>] [-e <endianess:be>] [-d <delay:0>] [-m <multiplier:1>]"
-    echo "                   <host> <functioncode:1|2|3|4|5|6> <register> <type:uint16|int16|uint32|int32|float|(stringbytes)> [<newvalue>]" 1>&2
+    echo "                   <host> <functioncode:1|2|3|4|5|6> <register> <type:uint16|int16|uint32|int32|float|(stringbytes)> [<newvalue>]"
     echo ""
     echo "stringbytes : read this many bytes and interpret as text"
     echo "endianess   : be or le"
